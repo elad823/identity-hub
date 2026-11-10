@@ -2,10 +2,12 @@
 import { useEffect, useState } from 'react';
 import { api, errorMessage } from './api';
 import LoginForm, { type User } from './components/LoginForm';
+import ConnectJira from './components/ConnectJira';
 
 export default function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [error, setError] = useState('');
+  const [project, setProject] = useState('');
 
   function loadMe() {
     setError('');
@@ -39,10 +41,13 @@ export default function App() {
       {user === undefined && !error && <p>Loading…</p>}
       {user === null && <LoginForm onSignedIn={setUser} />}
       {user && (
-        <div className="card">
-          <p>Signed in as <strong>{user.email}</strong></p>
-          <button onClick={logout}>Log out</button>
-        </div>
+        <>
+          <div className="card">
+            <p>Signed in as <strong>{user.email}</strong></p>
+            <button onClick={logout}>Log out</button>
+          </div>
+          <ConnectJira project={project} onProjectChange={setProject} onConnectedChange={() => {}} />
+        </>
       )}
     </main>
   );

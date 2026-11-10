@@ -1,12 +1,13 @@
 // Tests for the whole server, using Fastify's inject() so no real port is opened.
-import { beforeAll, describe, expect, it } from 'vitest';
+import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { initDb } from '../src/db.js';
+import { getConnection, initDb } from '../src/db.js';
 import { buildApp } from '../src/app.js';
 
 let app: FastifyInstance;
 
 beforeAll(async () => {
+  process.env.ENCRYPTION_KEY = Buffer.alloc(32, 7).toString('base64');
   initDb(':memory:');
   app = await buildApp();
 });
@@ -51,5 +52,68 @@ describe('auth', () => {
     const meB = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie: b.cookie } });
     expect(meA.json().user.email).toBe('u1@example.com');
     expect(meB.json().user.email).toBe('u2@example.com');
+  });
+});
+
+function jsonResponse(status: number, body: unknown): Response {
+  return new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+}
+
+async function connect(cookie: string, siteUrl = 'https://acme.atlassian.net', apiToken = 'secret-jira-token') {
+  return app.inject({ method: 'PUT', url: '/api/jira/connection', headers: { cookie }, payload: { siteUrl, email: 'dana@acme.com', apiToken } });
+}
+
+describe('jira connection', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  it('stores the token encrypted and never returns it', async () => {
+    const fetchMock = vi.fn(async () => jsonResponse(200, { displayName: 'Dana' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const { cookie } = await register('jira1@example.com');
+    const res = await connect(cookie);
+    expect(res.statusCode).toBe(200);
+    expect(res.body).not.toContain('secret-jira-token');
+    const me = await app.inject({ method: 'GET', url: '/api/auth/me', headers: { cookie } });
+    const stored = getConnection(me.json().user.id);
+    expect(stored?.token_enc).toBeTruthy();
+    expect(stored?.token_enc).not.toContain('secret-jira-token');
+    expect(fetchMock).toHaveBeenCalledWith('https://acme.atlassian.net/rest/api/3/myself', expect.objectContaining({ redirect: 'manual' }));
+  });
+
+  it('rejects site URLs that are not https://name.atlassian.net without calling out', async () => {
+    const fetchMock = vi.fn();
+    vi.stubGlobal('fetch', fetchMock);
+    const { cookie } = await register('jira2@example.com');
+    for (const url of ['http://x.com', 'https://acme.atlassian.net.evil.com', 'http://acme.atlassian.net']) {
+      const res = await connect(cookie, url);
+      expect(res.statusCode).toBe(400);
+      expect(res.json().error.code).toBe('JIRA_SITE_INVALID');
+    }
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it('shows a clear message when Jira rejects the token', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(401, {})));
+    const { cookie } = await register('jira3@example.com');
+    const res = await connect(cookie);
+    expect(res.json().error.message).toBe('Jira did not accept this email and token');
+  });
+
+  it('keeps each user connection private', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, { displayName: 'Dana' })));
+    const a = await register('jira4@example.com');
+    const b = await register('jira5@example.com');
+    await connect(a.cookie);
+    const connB = await app.inject({ method: 'GET', url: '/api/jira/connection', headers: { cookie: b.cookie } });
+    expect(connB.json()).toEqual({ connected: false });
+    const projB = await app.inject({ method: 'GET', url: '/api/jira/projects', headers: { cookie: b.cookie } });
+    expect(projB.json().error.code).toBe('JIRA_NOT_CONNECTED');
+  });
+
+  it('refuses to follow a redirect from Jira', async () => {
+    vi.stubGlobal('fetch', vi.fn(async () => new Response(null, { status: 302, headers: { location: 'http://evil.com' } })));
+    const { cookie } = await register('jira6@example.com');
+    const res = await connect(cookie);
+    expect(res.statusCode).toBe(502);
   });
 });

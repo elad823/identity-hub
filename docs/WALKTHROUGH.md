@@ -29,3 +29,26 @@ Passwords are hashed with scrypt, and the session cookie is just a random ID who
 **Run and try**
 `npm run dev`, open http://localhost:5173, register, reload (still signed in), log out.
 Failure case: log in with a wrong password and see "Email or password is incorrect".
+
+## Phase 2: connect Jira and pick a project
+
+**Added**
+- `server/src/crypto.ts`: `encrypt` / `decrypt` with AES-256-GCM (key from `ENCRYPTION_KEY`, checked at startup).
+- `server/src/db.ts`: `jira_connections` table, `saveConnection`, `getConnection`.
+- `server/src/jira.ts`: site URL check, `verify` (`GET /rest/api/3/myself`), `listProjects` (`GET /rest/api/3/project/search`), no redirects, 10 second timeout, error mapping.
+- `server/src/routes/jira.ts`: `GET/PUT /api/jira/connection`, `GET /api/jira/projects`.
+- `client/src/components/ConnectJira.tsx`: connect form, connected summary, project picker (`<input list>` plus `<datalist>`).
+
+**One request: `PUT /api/jira/connection`**
+1. `requireUser` finds the signed-in user from the cookie.
+2. Zod checks the body. `normalizeSite` accepts only `https://<name>.atlassian.net`.
+3. `verify` calls Jira `/myself` with Basic auth (email and token). Jira says 401 gives "Jira did not accept this email and token".
+4. The token is encrypted (random IV, auth tag) and saved with the user ID. The response has the site, email and display name, never the token.
+5. `GET /api/jira/projects` later decrypts the token on the server and asks Jira for the project list. The browser never talks to Jira.
+
+**Explain it in the interview**
+The Jira API token is encrypted with AES-256-GCM before it touches the database, and it is only decrypted in memory when the server calls Jira. The site URL must match `*.atlassian.net` and redirects are refused, so a user cannot make the server call another host.
+
+**Run and try**
+`npm run gen:key`, put the value in `.env` as `ENCRYPTION_KEY`, `npm run dev`, then use the Connect Jira card.
+Failure case: enter `http://x.com` as the site and see the Jira Cloud URL message.

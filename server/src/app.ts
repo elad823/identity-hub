@@ -8,6 +8,7 @@ import { join } from 'node:path';
 import { rootDir } from './db.js';
 import { AppError, errorHandler } from './errors.js';
 import authRoutes from './routes/auth.js';
+import jiraRoutes from './routes/jira.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
@@ -27,6 +28,7 @@ export async function buildApp() {
 
   app.setErrorHandler(errorHandler);
   await app.register(authRoutes, { prefix: '/api/auth' });
+  await app.register(jiraRoutes, { prefix: '/api/jira' });
 
   const clientDir = join(rootDir, 'client', 'dist');
   const hasClient = existsSync(clientDir);

@@ -29,6 +29,14 @@ export function initDb(path: string): void {
       user_id TEXT NOT NULL REFERENCES users(id),
       expires_at INTEGER NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS jira_connections (
+      user_id TEXT PRIMARY KEY REFERENCES users(id),
+      site_url TEXT NOT NULL,
+      email TEXT NOT NULL,
+      token_enc TEXT NOT NULL,
+      display_name TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
 }
 
@@ -68,4 +76,22 @@ export function deleteSession(idHash: string): void {
 
 export function deleteExpiredSessions(now: number): void {
   db.prepare('DELETE FROM sessions WHERE expires_at <= ?').run(now);
+}
+
+export type JiraConnection = { site_url: string; email: string; token_enc: string; display_name: string };
+
+// One connection per user; saving again replaces it.
+export function saveConnection(userId: string, c: JiraConnection): void {
+  db.prepare(
+    `INSERT INTO jira_connections (user_id, site_url, email, token_enc, display_name, created_at)
+     VALUES (?, ?, ?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET site_url = excluded.site_url, email = excluded.email,
+       token_enc = excluded.token_enc, display_name = excluded.display_name, created_at = excluded.created_at`,
+  ).run(userId, c.site_url, c.email, c.token_enc, c.display_name, new Date().toISOString());
+}
+
+export function getConnection(userId: string): JiraConnection | undefined {
+  return db
+    .prepare('SELECT site_url, email, token_enc, display_name FROM jira_connections WHERE user_id = ?')
+    .get(userId) as JiraConnection | undefined;
 }

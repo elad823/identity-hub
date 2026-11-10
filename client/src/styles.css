@@ -12,3 +12,4 @@ button.link { background: none; color: #2457d6; padding: 0; text-align: left; }
 .banner.error { background: #fde8e8; color: #8a1c1c; }
 .banner.ok { background: #e3f6e8; color: #17572b; }
 .field-error { color: #8a1c1c; font-size: 0.8rem; }
+.hint { color: #5b6577; font-size: 0.8rem; }
