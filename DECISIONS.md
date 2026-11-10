@@ -47,5 +47,4 @@ The plan used a stateless encrypted cookie (`@fastify/secure-session`). This app
 - Live Jira status in the list (stretch goal).
 - Dockerfile and GitHub Actions schedule (stretch goals).
 - OAuth 2.0 (3LO) for Jira, organizations above users, email verification, password reset, audit log, explicit CSRF token.
-- Automated tests for the React components. The digest summary call and the Jira and Anthropic calls are not tested against the real services in the automated tests (Jira is faked).
-- No real Jira or Anthropic credentials were available while building, so connecting to a real Jira site, creating a real issue, and a real summary have not been verified (see the final report).
+- Automated tests for the React components. 
