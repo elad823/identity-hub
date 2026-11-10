@@ -1,6 +1,6 @@
 // Session helpers: the cookie holds a random ID, the sessions table holds its hash. requireUser guards routes.
 import type { FastifyReply, FastifyRequest } from 'fastify';
-import { createSession, deleteExpiredSessions, deleteSession, findSessionUser } from './db.js';
+import { createSession, deleteExpiredSessions, deleteSession, findSessionUser, findUserIdByApiKeyHash } from './db.js';
 import { randomToken, sha256 } from './crypto.js';
 import { AppError } from './errors.js';
 
@@ -31,4 +31,12 @@ export function requireUser(req: FastifyRequest): { id: string; email: string } 
   const user = sessionId ? findSessionUser(sha256(sessionId), Date.now()) : undefined;
   if (!user) throw new AppError(401, 'UNAUTHENTICATED', 'Please log in');
   return user;
+}
+
+// For the public API: the X-API-Key header is hashed and matched against api_keys. Returns the key owner's user ID.
+export function requireApiKey(req: FastifyRequest): string {
+  const key = req.headers['x-api-key'];
+  const userId = typeof key === 'string' && key ? findUserIdByApiKeyHash(sha256(key)) : undefined;
+  if (!userId) throw new AppError(401, 'UNAUTHENTICATED', 'Invalid API key');
+  return userId;
 }

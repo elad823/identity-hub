@@ -5,6 +5,7 @@ import LoginForm, { type User } from './components/LoginForm';
 import ConnectJira from './components/ConnectJira';
 import TicketForm from './components/TicketForm';
 import RecentTickets from './components/RecentTickets';
+import ApiKeyPanel from './components/ApiKeyPanel';
 
 export default function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
@@ -55,6 +56,7 @@ export default function App() {
           </div>
           <TicketForm project={project} connected={connected} onCreated={() => setRefreshKey((n) => n + 1)} />
           <RecentTickets project={project} refreshKey={refreshKey} />
+          <ApiKeyPanel />
         </>
       )}
     </main>

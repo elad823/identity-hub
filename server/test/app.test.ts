@@ -1,7 +1,8 @@
 // Tests for the whole server, using Fastify's inject() so no real port is opened.
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
-import { getConnection, initDb } from '../src/db.js';
+import { findUserIdByApiKeyHash, getConnection, initDb } from '../src/db.js';
+import { sha256 } from '../src/crypto.js';
 import { buildApp } from '../src/app.js';
 
 let app: FastifyInstance;
@@ -175,5 +176,61 @@ describe('tickets', () => {
     const { cookie: b } = await register('t6@example.com');
     const list = await app.inject({ method: 'GET', url: '/api/tickets', headers: { cookie: b } });
     expect(list.json().tickets).toEqual([]);
+  });
+});
+
+describe('public API', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function userWithKey(email: string) {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, { displayName: 'Dana' })));
+    const { cookie } = await register(email);
+    await connect(cookie);
+    const res = await app.inject({ method: 'POST', url: '/api/api-key', headers: { cookie }, payload: {} });
+    return { cookie, apiKey: res.json().apiKey as string };
+  }
+
+  function post(apiKey: string | undefined, payload: object) {
+    return app.inject({ method: 'POST', url: '/api/v1/findings', headers: apiKey ? { 'x-api-key': apiKey } : {}, payload });
+  }
+
+  it('creates a finding with a valid key and returns 201 with Location', async () => {
+    const { apiKey } = await userWithKey('p1@example.com');
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(201, { id: '9', key: 'SEC-9' })));
+    const res = await post(apiKey, { projectKey: 'SEC', title: 'Stale service account', description: 'Unused for 400 days', severity: 'LOW' });
+    expect(res.statusCode).toBe(201);
+    expect(res.headers.location).toBe('https://acme.atlassian.net/browse/SEC-9');
+  });
+
+  it('stores only a hash of the key', async () => {
+    const { apiKey } = await userWithKey('p2@example.com');
+    expect(findUserIdByApiKeyHash(apiKey)).toBeUndefined();
+    expect(findUserIdByApiKeyHash(sha256(apiKey))).toBeTruthy();
+  });
+
+  it('returns 401 for a missing or wrong key', async () => {
+    const body = { projectKey: 'SEC', title: 'Some finding', description: 'Details' };
+    const missing = await post(undefined, body);
+    const wrong = await post('ihk_wrong', body);
+    expect(missing.statusCode).toBe(401);
+    expect(wrong.statusCode).toBe(401);
+    expect(wrong.json().error.message).toBe('Invalid API key');
+  });
+
+  it('returns 400 with field messages for a bad body and 404 for a missing project', async () => {
+    const { apiKey } = await userWithKey('p3@example.com');
+    const bad = await post(apiKey, { projectKey: 'SEC', title: 'abc' });
+    expect(bad.statusCode).toBe(400);
+    expect(bad.json().error.fields.title).toBe('Title must be at least 5 characters');
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(400, { errors: { project: 'valid project is required' } })));
+    const missing = await post(apiKey, { projectKey: 'NOPE', title: 'Some finding', description: 'Details' });
+    expect(missing.statusCode).toBe(404);
+  });
+
+  it('stops the old key working after it is replaced', async () => {
+    const { cookie, apiKey } = await userWithKey('p4@example.com');
+    await app.inject({ method: 'POST', url: '/api/api-key', headers: { cookie }, payload: {} });
+    const res = await post(apiKey, { projectKey: 'SEC', title: 'Some finding', description: 'Details' });
+    expect(res.statusCode).toBe(401);
   });
 });

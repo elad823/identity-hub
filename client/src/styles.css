@@ -21,3 +21,4 @@ button.link { background: none; color: #2457d6; padding: 0; text-align: left; }
 .badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 10px; background: #e6e9ef; }
 .badge.high, .badge.critical { background: #fde8e8; color: #8a1c1c; }
 .badge.medium { background: #fff3d6; color: #7a5200; }
+.key { word-break: break-all; }

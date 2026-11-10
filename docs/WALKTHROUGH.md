@@ -76,3 +76,31 @@ The UI route and (later) the public API share one `createTicket` function, so va
 **Run and try**
 Connect Jira, choose a project, fill the form, submit, open the link. Use Refresh in the list.
 Failure case: type a project key that does not exist and submit. You should see "Project not found, or you do not have access to it".
+
+## Phase 4a: REST API with an API key
+
+**Added**
+- `server/src/db.ts`: `api_keys` table (one key per user), `saveApiKey`, `getApiKeyInfo`, `findUserIdByApiKeyHash`.
+- `server/src/auth.ts`: `requireApiKey` (hashes the `X-API-Key` header and looks it up).
+- `server/src/routes/apiKey.ts`: `GET /api/api-key` (status and prefix only), `POST /api/api-key` (generate or replace, returns the key once).
+- `server/src/routes/publicApi.ts`: `POST /api/v1/findings`.
+- `client/src/components/ApiKeyPanel.tsx`: generate, show once, copy button.
+
+**One request: `POST /api/v1/findings`**
+1. The caller sends JSON and an `X-API-Key` header (no cookie).
+2. `requireApiKey` computes SHA-256 of the header and finds the owner in `api_keys`. No match gives 401 "Invalid API key".
+3. The same `ticketInput` Zod schema as the UI validates the body (400 with field messages).
+4. The same `createTicket` function runs as for the UI, using the key owner's saved Jira connection. A missing project gives 404.
+5. The server answers `201 Created` with a `Location` header pointing to the Jira issue.
+
+**Explain it in the interview**
+The API key is a random value shown once. Only its SHA-256 hash is stored, so a database leak does not leak working keys. The public endpoint and the UI share the same validation and ticket function, so there is one behavior to test.
+
+**Run and try**
+Generate a key in the UI, then:
+```
+curl -i -X POST http://localhost:3000/api/v1/findings \
+  -H 'Content-Type: application/json' -H 'X-API-Key: <your key>' \
+  -d '{"projectKey":"SEC","title":"Stale service account","description":"Unused for 400 days","severity":"LOW"}'
+```
+Failure cases: no key or a wrong key gives 401, a short title gives 400 with field messages, an unknown project gives 404.

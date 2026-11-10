@@ -37,6 +37,12 @@ export function initDb(path: string): void {
       display_name TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS api_keys (
+      user_id TEXT PRIMARY KEY REFERENCES users(id),
+      key_hash TEXT NOT NULL UNIQUE,
+      prefix TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
     CREATE TABLE IF NOT EXISTS tickets (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL REFERENCES users(id),
@@ -134,4 +140,23 @@ export function listTickets(userId: string, projectKey?: string): Ticket[] {
        ORDER BY created_at DESC, rowid DESC LIMIT 10`,
     )
     .all(userId, projectKey ?? null, projectKey ?? null) as Ticket[];
+}
+
+// One key per user; saving a new one replaces (and so revokes) the old one.
+export function saveApiKey(userId: string, keyHash: string, prefix: string): void {
+  db.prepare(
+    `INSERT INTO api_keys (user_id, key_hash, prefix, created_at) VALUES (?, ?, ?, ?)
+     ON CONFLICT(user_id) DO UPDATE SET key_hash = excluded.key_hash, prefix = excluded.prefix, created_at = excluded.created_at`,
+  ).run(userId, keyHash, prefix, new Date().toISOString());
+}
+
+export function getApiKeyInfo(userId: string): { prefix: string; created_at: string } | undefined {
+  return db.prepare('SELECT prefix, created_at FROM api_keys WHERE user_id = ?').get(userId) as
+    | { prefix: string; created_at: string }
+    | undefined;
+}
+
+export function findUserIdByApiKeyHash(keyHash: string): string | undefined {
+  const row = db.prepare('SELECT user_id FROM api_keys WHERE key_hash = ?').get(keyHash) as { user_id: string } | undefined;
+  return row?.user_id;
 }

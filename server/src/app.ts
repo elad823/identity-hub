@@ -10,6 +10,8 @@ import { AppError, errorHandler } from './errors.js';
 import authRoutes from './routes/auth.js';
 import jiraRoutes from './routes/jira.js';
 import ticketRoutes from './routes/tickets.js';
+import apiKeyRoutes from './routes/apiKey.js';
+import publicApiRoutes from './routes/publicApi.js';
 
 export async function buildApp() {
   const app = Fastify({ logger: process.env.NODE_ENV !== 'test' });
@@ -31,6 +33,8 @@ export async function buildApp() {
   await app.register(authRoutes, { prefix: '/api/auth' });
   await app.register(jiraRoutes, { prefix: '/api/jira' });
   await app.register(ticketRoutes, { prefix: '/api/tickets' });
+  await app.register(apiKeyRoutes, { prefix: '/api/api-key' });
+  await app.register(publicApiRoutes, { prefix: '/api/v1' });
 
   const clientDir = join(rootDir, 'client', 'dist');
   const hasClient = existsSync(clientDir);

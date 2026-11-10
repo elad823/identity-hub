@@ -104,10 +104,10 @@ export const PROJECT_KEY_RE = /^[A-Z][A-Z0-9_]{1,9}$/;
 
 // The one input shape for creating a ticket, used by the UI route and the public API.
 export const ticketInput = z.object({
-  projectKey: z.string().trim().toUpperCase().regex(PROJECT_KEY_RE, 'Project key looks like ABC (2 to 10 letters or digits)'),
-  title: z.string().trim().min(5, 'Title must be at least 5 characters').max(255, 'Title must be at most 255 characters'),
-  description: z.string().trim().min(1, 'Add a description').max(10_000, 'Description must be at most 10000 characters'),
-  severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).default('MEDIUM'),
+  projectKey: z.string('Project key is required').trim().toUpperCase().regex(PROJECT_KEY_RE, 'Project key looks like ABC (2 to 10 letters or digits)'),
+  title: z.string('Title is required').trim().min(5, 'Title must be at least 5 characters').max(255, 'Title must be at most 255 characters'),
+  description: z.string('Description is required').trim().min(1, 'Add a description').max(10_000, 'Description must be at most 10000 characters'),
+  severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL'], 'Severity must be LOW, MEDIUM, HIGH or CRITICAL').default('MEDIUM'),
 });
 export type TicketInput = z.infer<typeof ticketInput>;
 
