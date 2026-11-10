@@ -3,6 +3,7 @@ import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import type { FastifyInstance } from 'fastify';
 import { findUserIdByApiKeyHash, getConnection, initDb } from '../src/db.js';
 import { sha256 } from '../src/crypto.js';
+import { findFeedLink, firstFeedEntry, firstPostLink } from '../scripts/digest.js';
 import { buildApp } from '../src/app.js';
 
 let app: FastifyInstance;
@@ -232,5 +233,33 @@ describe('public API', () => {
     await app.inject({ method: 'POST', url: '/api/api-key', headers: { cookie }, payload: {} });
     const res = await post(apiKey, { projectKey: 'SEC', title: 'Some finding', description: 'Details' });
     expect(res.statusCode).toBe(401);
+  });
+});
+
+describe('digest parsing', () => {
+  const blogHtml = `<html><head>
+    <link rel="alternate" type="application/rss+xml" href="/blog/rss.xml">
+  </head><body>
+    <a href="/about">About</a>
+    <a href="/blog/page/2">Older</a>
+    <a href="/blog/first-post-slug">First</a>
+    <a href="/blog/second-post-slug">Second</a>
+  </body></html>`;
+
+  it('finds the feed link, or nothing when the page has none', () => {
+    expect(findFeedLink(blogHtml, 'https://www.example.com/blog')).toBe('https://www.example.com/blog/rss.xml');
+    expect(findFeedLink('<html><head></head></html>', 'https://www.example.com/blog')).toBeUndefined();
+  });
+
+  it('reads the first entry of an RSS feed and of an Atom feed', () => {
+    const rss = '<rss><channel><item><title>Newest post</title><link>https://x.com/blog/new</link></item><item><title>Old</title><link>https://x.com/blog/old</link></item></channel></rss>';
+    expect(firstFeedEntry(rss)).toEqual({ title: 'Newest post', url: 'https://x.com/blog/new' });
+    const atom = '<feed><entry><title>Atom post</title><link href="https://x.com/blog/atom"/></entry></feed>';
+    expect(firstFeedEntry(atom)).toEqual({ title: 'Atom post', url: 'https://x.com/blog/atom' });
+  });
+
+  it('picks the first real post link and skips pagination links', () => {
+    expect(firstPostLink(blogHtml, 'https://www.example.com/blog')).toBe('https://www.example.com/blog/first-post-slug');
+    expect(firstPostLink('<a href="/contact">x</a>', 'https://www.example.com/blog')).toBeUndefined();
   });
 });

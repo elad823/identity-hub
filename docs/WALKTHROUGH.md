@@ -104,3 +104,24 @@ curl -i -X POST http://localhost:3000/api/v1/findings \
   -d '{"projectKey":"SEC","title":"Stale service account","description":"Unused for 400 days","severity":"LOW"}'
 ```
 Failure cases: no key or a wrong key gives 401, a short title gives 400 with field messages, an unknown project gives 404.
+
+## Phase 4b: NHI Blog Digest, tests and docs
+
+**Added**
+- `server/scripts/digest.ts`: the digest script (`npm run digest`).
+- `server/test/app.test.ts`: now covers auth, isolation, Jira connection, tickets, public API and the digest parsers.
+- `README.md`, `DECISIONS.md`, `.env.example` with the digest settings.
+
+**One run of `npm run digest`**
+1. Check that `ANTHROPIC_API_KEY`, `DIGEST_API_KEY` and `DIGEST_PROJECT_KEY` are set, or print one clear line and exit with code 1.
+2. Fetch the blog page. `findFeedLink` looks for an RSS or Atom link; if there is one, `firstFeedEntry` reads its first entry. Otherwise `firstPostLink` takes the first `/blog/<slug>` link. (The Oasis blog has no feed, so the fallback is what runs.)
+3. If the URL equals the one in `data/digest-last-url.txt`, print "Already processed, nothing to do" and stop.
+4. Read the post (title from `<h1>`, text from `<p>`, at most 12,000 characters) and ask `claude-haiku-5-5` for a summary of at most 120 words. The system prompt says the article is untrusted.
+5. POST the title and `summary + URL` to our own `/api/v1/findings` with the API key, severity `LOW`. Save the URL and print the Jira key and link.
+
+**Explain it in the interview**
+The digest is a separate script that uses the same public API as any outside system, so it proves the API works end to end. It does not trust the blog text: the model is told to ignore instructions in it, and the result goes to Jira only as plain text.
+
+**Run and try**
+Start the app, put the three settings in `.env`, run `npm run digest`, then run it again.
+Failure case: stop the app and run it, or remove `DIGEST_API_KEY`. You get a single clear line and a non-zero exit code.
