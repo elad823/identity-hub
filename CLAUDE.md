@@ -3,7 +3,7 @@
 Read this file, then `IMPLEMENTATION_PLAN.md`.
 
 ## What this is
-A **3-hour interview proof of concept**, not a production system. Logged-in users connect their own Jira Cloud account, create "NHI finding" tickets, and see their recent tickets. External systems can create tickets through an API-key-protected endpoint.
+Not a production system. Logged-in users connect their own Jira Cloud account, create "NHI finding" tickets, and see their recent tickets. External systems can create tickets through an API-key-protected endpoint.
 
 Priorities, in order:
 1. The owner can **follow and explain every file**.
@@ -46,7 +46,7 @@ client/src: main.tsx, App.tsx, api.ts, styles.css, components/*.tsx
 - If a search endpoint is ever used, it is `POST /rest/api/3/search/jql` (the old `/search` was removed).
 
 ## Build workflow (all phases in one run)
-The owner approves once, at the start. After that, build all phases in order without waiting between them. The phases still matter: each one is a separate commit and tag so the owner can read the history and run every step.
+The owner approves each phase, at a time. Each one is a separate commit and tag so the owner can read the history and run every step.
 
 **Step 0: one approval, before any change.**
 Read both files and inspect the repository. Reading is fine; creating, editing, deleting or installing is not yet. Then output, in under 15 lines: what you will build, anything unclear, and, if the repo already has code from an earlier plan, a list of what you would delete and what you would keep. Ask for the GitHub repository URL. Stop and wait for the owner to say "go".
@@ -63,7 +63,7 @@ Every tag must leave the app runnable, so the owner can `git checkout phase-2` a
 **What each `docs/WALKTHROUGH.md` section contains** (plain language, short):
 - what the phase added and which files it touched, one line each
 - how one request flows through the code, step by step
-- 2 to 3 sentences the owner can use to explain the phase in the interview
+- 2 to 3 sentences to explain the phase 
 - how to run and try it, and one failure case to try
 
 **Stop and ask the owner only if:**
