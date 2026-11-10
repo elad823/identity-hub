@@ -1,0 +1,14 @@
+/* Plain CSS for the whole app. */
+body { font-family: system-ui, sans-serif; background: #f5f6f8; color: #1d2433; margin: 0; }
+main { max-width: 720px; margin: 0 auto; padding: 24px 16px; }
+h1 { font-size: 1.5rem; }
+.card { background: #fff; border: 1px solid #dde1e8; border-radius: 8px; padding: 16px; margin-bottom: 16px; display: flex; flex-direction: column; gap: 12px; }
+label { display: flex; flex-direction: column; gap: 4px; font-size: 0.9rem; }
+input, select, textarea { padding: 8px; border: 1px solid #b9c0cc; border-radius: 4px; font: inherit; }
+button { padding: 8px 14px; border: 0; border-radius: 4px; background: #2457d6; color: #fff; font: inherit; cursor: pointer; }
+button:disabled { opacity: 0.6; cursor: not-allowed; }
+button.link { background: none; color: #2457d6; padding: 0; text-align: left; }
+.banner { padding: 8px 12px; border-radius: 4px; margin: 0; }
+.banner.error { background: #fde8e8; color: #8a1c1c; }
+.banner.ok { background: #e3f6e8; color: #17572b; }
+.field-error { color: #8a1c1c; font-size: 0.8rem; }
