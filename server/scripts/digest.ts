@@ -117,9 +117,12 @@ async function createTicket(apiUrl: string, apiKey: string, projectKey: string, 
   } catch {
     return fail(`Cannot reach the app at ${apiUrl}. Is it running? (npm run dev or npm start)`);
   }
-  const body = (await res.json().catch(() => null)) as { finding?: { issueKey: string; issueUrl: string }; error?: { message?: string } } | null;
+  const body = (await res.json().catch(() => null)) as { finding?: { issueKey: string; issueUrl: string }; error?: { code?: string; message?: string } } | null;
   if (res.status === 401) fail('The API did not accept DIGEST_API_KEY. Create a new key in the app.');
-  if (res.status === 404) fail(`Jira project ${projectKey} was not found, or the key owner has no access to it.`);
+  if (res.status === 404 && body?.error?.code === 'PROJECT_NOT_FOUND') {
+    fail(`Jira project ${projectKey} was not found, or the key owner has no access to it.`);
+  }
+  if (res.status === 404) fail(`${apiUrl} did not answer like identity-hub (HTTP 404). Check DIGEST_API_URL and that the app is running there.`);
   if (!res.ok || !body?.finding) fail(`The API could not create the ticket: ${body?.error?.message ?? `HTTP ${res.status}`}`);
   return body.finding;
 }

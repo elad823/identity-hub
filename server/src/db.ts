@@ -54,6 +54,11 @@ export function initDb(path: string): void {
       created_at TEXT NOT NULL
     );
   `);
+  // Databases created before descriptions were stored get the column added once.
+  const cols = db.prepare('PRAGMA table_info(tickets)').all() as { name: string }[];
+  if (!cols.some((c) => c.name === 'description')) {
+    db.exec("ALTER TABLE tickets ADD COLUMN description TEXT NOT NULL DEFAULT ''");
+  }
 }
 
 export function createUser(email: string, passwordHash: string): User {
@@ -118,6 +123,7 @@ export type Ticket = {
   issue_key: string;
   issue_url: string;
   title: string;
+  description: string;
   severity: string;
   created_at: string;
 };
@@ -125,21 +131,36 @@ export type Ticket = {
 export function insertTicket(userId: string, t: Omit<Ticket, 'id' | 'created_at'>): Ticket {
   const ticket = { ...t, id: randomUUID(), created_at: new Date().toISOString() };
   db.prepare(
-    `INSERT INTO tickets (id, user_id, project_key, issue_key, issue_url, title, severity, created_at)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-  ).run(ticket.id, userId, ticket.project_key, ticket.issue_key, ticket.issue_url, ticket.title, ticket.severity, ticket.created_at);
+    `INSERT INTO tickets (id, user_id, project_key, issue_key, issue_url, title, description, severity, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(ticket.id, userId, ticket.project_key, ticket.issue_key, ticket.issue_url, ticket.title, ticket.description, ticket.severity, ticket.created_at);
   return ticket;
 }
 
-// The 10 newest tickets of this user, optionally for one project.
-export function listTickets(userId: string, projectKey?: string): Ticket[] {
+// One page of this user's tickets, newest first, optionally for one project.
+export function listTickets(userId: string, projectKey: string | undefined, limit: number, offset: number): Ticket[] {
   return db
     .prepare(
-      `SELECT id, project_key, issue_key, issue_url, title, severity, created_at FROM tickets
+      `SELECT id, project_key, issue_key, issue_url, title, description, severity, created_at FROM tickets
        WHERE user_id = ? AND (? IS NULL OR project_key = ?)
-       ORDER BY created_at DESC, rowid DESC LIMIT 10`,
+       ORDER BY created_at DESC, rowid DESC LIMIT ? OFFSET ?`,
     )
-    .all(userId, projectKey ?? null, projectKey ?? null) as Ticket[];
+    .all(userId, projectKey ?? null, projectKey ?? null, limit, offset) as Ticket[];
+}
+
+export function countTickets(userId: string, projectKey?: string): number {
+  const row = db
+    .prepare('SELECT COUNT(*) AS n FROM tickets WHERE user_id = ? AND (? IS NULL OR project_key = ?)')
+    .get(userId, projectKey ?? null, projectKey ?? null) as { n: number };
+  return row.n;
+}
+
+// The project keys this user has tickets in, for the list filter.
+export function listTicketProjects(userId: string): string[] {
+  const rows = db.prepare('SELECT DISTINCT project_key FROM tickets WHERE user_id = ? ORDER BY project_key').all(userId) as {
+    project_key: string;
+  }[];
+  return rows.map((r) => r.project_key);
 }
 
 // One key per user; saving a new one replaces (and so revokes) the old one.

@@ -6,10 +6,10 @@ import { createTicket, ticketInput } from '../jira.js';
 export default async function publicApiRoutes(app: FastifyInstance) {
   app.post('/findings', async (req, reply) => {
     const userId = requireApiKey(req);
-    const ticket = await createTicket(userId, ticketInput.parse(req.body));
+    const { ticket, prioritySet } = await createTicket(userId, ticketInput.parse(req.body));
     return reply
       .status(201)
       .header('Location', ticket.issue_url)
-      .send({ finding: { issueKey: ticket.issue_key, issueUrl: ticket.issue_url, projectKey: ticket.project_key, title: ticket.title, severity: ticket.severity } });
+      .send({ finding: { issueKey: ticket.issue_key, issueUrl: ticket.issue_url, projectKey: ticket.project_key, title: ticket.title, severity: ticket.severity, prioritySet } });
   });
 }

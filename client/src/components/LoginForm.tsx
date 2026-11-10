@@ -12,8 +12,15 @@ export default function LoginForm({ onSignedIn }: { onSignedIn: (user: User) => 
   const [error, setError] = useState('');
   const [fields, setFields] = useState<Record<string, string>>({});
 
+  function switchMode() {
+    setMode(mode === 'login' ? 'register' : 'login');
+    setError('');
+    setFields({});
+  }
+
   async function submit(e: FormEvent) {
     e.preventDefault();
+    if (busy) return;
     setBusy(true);
     setError('');
     setFields({});
@@ -29,21 +36,28 @@ export default function LoginForm({ onSignedIn }: { onSignedIn: (user: User) => 
   }
 
   return (
-    <form className="card" onSubmit={submit}>
+    <form className="card auth-card" onSubmit={submit}>
       <h2>{mode === 'login' ? 'Log in' : 'Create account'}</h2>
       {error && <p className="banner error" role="alert">{error}</p>}
       <label>
         Email
-        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} required />
+        <input type="email" value={email} onChange={(e) => setEmail(e.target.value)} autoComplete="email" aria-invalid={!!fields.email} required />
         {fields.email && <span className="field-error">{fields.email}</span>}
       </label>
       <label>
         Password
-        <input type="password" value={password} onChange={(e) => setPassword(e.target.value)} required />
+        <input
+          type="password"
+          value={password}
+          onChange={(e) => setPassword(e.target.value)}
+          autoComplete={mode === 'login' ? 'current-password' : 'new-password'}
+          aria-invalid={!!fields.password}
+          required
+        />
         {fields.password && <span className="field-error">{fields.password}</span>}
       </label>
       <button type="submit" disabled={busy}>{busy ? 'Please wait…' : mode === 'login' ? 'Log in' : 'Register'}</button>
-      <button type="button" className="link" onClick={() => setMode(mode === 'login' ? 'register' : 'login')}>
+      <button type="button" className="link" onClick={switchMode}>
         {mode === 'login' ? 'Need an account? Register' : 'Have an account? Log in'}
       </button>
     </form>

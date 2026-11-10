@@ -23,7 +23,7 @@ Plain-language notes for each phase. Check out a tag (for example `git checkout 
 5. Later requests send the cookie. `requireUser` hashes it, looks up an unexpired row and returns the user, or throws 401.
 6. Logout deletes the row, so a copied cookie stops working immediately.
 
-**Explain it in the interview**
+**Explain*
 Passwords are hashed with scrypt, and the session cookie is just a random ID whose hash lives in a SQLite table, so logout really revokes it on the server. Every failure goes through one error handler, so the client always gets the same JSON shape and never a stack trace.
 
 **Run and try**
@@ -46,7 +46,7 @@ Failure case: log in with a wrong password and see "Email or password is incorre
 4. The token is encrypted (random IV, auth tag) and saved with the user ID. The response has the site, email and display name, never the token.
 5. `GET /api/jira/projects` later decrypts the token on the server and asks Jira for the project list. The browser never talks to Jira.
 
-**Explain it in the interview**
+**Explain*
 The Jira API token is encrypted with AES-256-GCM before it touches the database, and it is only decrypted in memory when the server calls Jira. The site URL must match `*.atlassian.net` and redirects are refused, so a user cannot make the server call another host.
 
 **Run and try**
@@ -56,7 +56,7 @@ Failure case: enter `http://x.com` as the site and see the Jira Cloud URL messag
 ## Phase 3: create tickets and see recent ones
 
 **Added**
-- `server/src/jira.ts`: `ticketInput` (Zod, strict project key regex), `createTicket` (`POST /rest/api/3/issue`, ADF description built as an object, labels `identityhub-nhi` and `severity-<level>`, issue type `Task`).
+- `server/src/jira.ts`: `ticketInput` (Zod, strict project key regex), `createTicket` (`POST /rest/api/3/issue`, ADF description built as an object, Jira Priority from the severity, labels `identityhub-nhi` and `severity-<level>`, issue type `Task`).
 - `server/src/db.ts`: `tickets` table, `insertTicket`, `listTickets` (always filtered by `user_id`, newest 10).
 - `server/src/routes/tickets.ts`: `POST /api/tickets`, `GET /api/tickets?projectKey=`.
 - `client/src/components/TicketForm.tsx`: the form with busy, field-error and banner states, disabled when Jira is not connected.
@@ -67,10 +67,10 @@ Failure case: enter `http://x.com` as the site and see the Jira Cloud URL messag
 2. `createTicket` loads and decrypts this user's Jira credentials (409 if none).
 3. The server builds the issue JSON, with the description as ADF paragraph objects, and posts it to Jira.
 4. Jira answers are mapped: 401 reconnect, 403 permission, 400 with a `project` error becomes 404 "Project not found, or you do not have access to it".
-5. On success the title, key and link are saved in `tickets` with the user ID. The description is not stored. The route returns 201.
+5. On success the title, description, key and link are saved in `tickets` with the user ID. The route returns 201.
 6. The list route reads only this user's rows, so another user's tickets are never visible.
 
-**Explain it in the interview**
+**Explain*
 The UI route and (later) the public API share one `createTicket` function, so validation, Jira mapping and storage live in one place. User text only enters Jira as ADF nodes and strict-regex project keys, never as concatenated strings.
 
 **Run and try**
@@ -93,7 +93,7 @@ Failure case: type a project key that does not exist and submit. You should see 
 4. The same `createTicket` function runs as for the UI, using the key owner's saved Jira connection. A missing project gives 404.
 5. The server answers `201 Created` with a `Location` header pointing to the Jira issue.
 
-**Explain it in the interview**
+**Explain*
 The API key is a random value shown once. Only its SHA-256 hash is stored, so a database leak does not leak working keys. The public endpoint and the UI share the same validation and ticket function, so there is one behavior to test.
 
 **Run and try**
@@ -119,9 +119,22 @@ Failure cases: no key or a wrong key gives 401, a short title gives 400 with fie
 4. Read the post (title from `<h1>`, text from `<p>`, at most 12,000 characters) and ask `claude-haiku-5-5` for a summary of at most 120 words. The system prompt says the article is untrusted.
 5. POST the title and `summary + URL` to our own `/api/v1/findings` with the API key, severity `LOW`. Save the URL and print the Jira key and link.
 
-**Explain it in the interview**
+**Explain*
 The digest is a separate script that uses the same public API as any outside system, so it proves the API works end to end. It does not trust the blog text: the model is told to ignore instructions in it, and the result goes to Jira only as plain text.
 
 **Run and try**
 Start the app, put the three settings in `.env`, run `npm run digest`, then run it again.
 Failure case: stop the app and run it, or remove `DIGEST_API_KEY`. You get a single clear line and a non-zero exit code.
+
+## Later changes: tabs, description, priority and pagination
+
+- **Tabs** (`client/src/App.tsx`): Create, Tickets, Jira, API key. All panels stay mounted and are hidden with the `hidden` attribute, so state survives tab switches.
+- **Description** is now stored in `tickets` (an `ALTER TABLE` adds the column to older databases) so the list can show it.
+- **Priority:** `createTicket` also sends Jira's Priority field (CRITICAL=Highest, HIGH=High, MEDIUM=Medium, LOW=Low). If Jira rejects the field, it retries without it and returns `prioritySet: false`.
+- **Pagination:** `GET /api/tickets?page=&pageSize=&projectKey=` returns `tickets`, `total`, `page`, `pageSize` and `projects`. `db.ts` uses `LIMIT/OFFSET` plus a `COUNT(*)`, both filtered by `user_id`. `TicketList.tsx` shows the table, the filter, Refresh and the pager, with skeleton, empty and keep-the-old-rows error states.
+
+## Later changes: UI robustness
+
+- `client/src/api.ts` has a 30 second timeout and one `setSessionExpiredHandler` hook. `App.tsx` registers it, so a 401 from any data call sends the user back to the login screen and clears the old session's state.
+- The Jira connection is tri-state (true, false, unknown) so a failed check is not shown as "not connected".
+- `ApiKeyPanel.tsx` asks before replacing a key. `TicketList.tsx` clamps the page if the list shrinks. Forms guard against double submits and mark invalid fields with `aria-invalid`.

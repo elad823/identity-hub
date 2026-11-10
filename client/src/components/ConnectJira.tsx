@@ -1,19 +1,11 @@
-// Jira connection card (connect form or summary) and the project picker shown once connected.
+// Jira connection card (connect form or summary), plus the project picker used on the Tickets tab.
 import { useEffect, useState, type FormEvent } from 'react';
 import { api, ApiError, errorMessage } from '../api';
 
 type Connection = { connected: false } | { connected: true; siteUrl: string; email: string; displayName: string };
 type Project = { key: string; name: string };
 
-export default function ConnectJira({
-  project,
-  onProjectChange,
-  onConnectedChange,
-}: {
-  project: string;
-  onProjectChange: (key: string) => void;
-  onConnectedChange: (connected: boolean) => void;
-}) {
+export default function ConnectJira({ onConnectedChange }: { onConnectedChange: (connected: boolean | null) => void }) {
   const [conn, setConn] = useState<Connection | null>(null);
   const [loadError, setLoadError] = useState('');
   const [editing, setEditing] = useState(false);
@@ -25,7 +17,10 @@ export default function ConnectJira({
         setConn(c);
         onConnectedChange(c.connected);
       })
-      .catch((err) => setLoadError(errorMessage(err)));
+      .catch((err) => {
+        setLoadError(errorMessage(err));
+        onConnectedChange(null);
+      });
   }
   // Runs once on mount; load only uses setters and a stable callback prop.
   useEffect(load, []);
@@ -58,7 +53,6 @@ export default function ConnectJira({
         Connected to <strong>{conn.siteUrl.replace('https://', '')}</strong> as {conn.displayName}{' '}
         <button className="link" onClick={() => setEditing(true)}>Change</button>
       </p>
-      <ProjectPicker project={project} onProjectChange={onProjectChange} />
     </div>
   );
 }
@@ -111,7 +105,7 @@ function ConnectForm({ onSaved, onCancel }: { onSaved: (c: Connection) => void; 
   );
 }
 
-function ProjectPicker({ project, onProjectChange }: { project: string; onProjectChange: (key: string) => void }) {
+export function ProjectPicker({ project, onProjectChange }: { project: string; onProjectChange: (key: string) => void }) {
   const [projects, setProjects] = useState<Project[] | null>(null);
   const [error, setError] = useState('');
 

@@ -26,14 +26,15 @@ Other commands: `npm test`, `npm run build`, `npm start` (one process serving th
 ## Try the UI
 
 1. Register, then log in.
-2. In **Connect Jira** enter the site URL, email and token. A wrong token shows "Jira did not accept this email and token".
-3. Pick a project from the list, or type a project key.
-4. Fill in **Create NHI finding** and submit. Open the link in the success message.
-5. **Recent tickets** shows the 10 newest tickets for the project. Use **Refresh** to reload.
+2. On the **Jira** tab enter the site URL, email and token. A wrong token shows "Jira did not accept this email and token".
+3. On the **Create** tab pick a project from the list, or type a project key.
+4. Fill in the form and submit. Open the link in the success message.
+5. The **Tickets** tab lists your tickets (10 per page) with a project filter and a Refresh button.
+6. The **API key** tab creates the key for the REST API.
 
 ## REST API
 
-Generate a key in the **API key** panel (shown once), then:
+Generate a key on the **API key** tab (shown once), then:
 
 ```bash
 curl -i -X POST http://localhost:3000/api/v1/findings \

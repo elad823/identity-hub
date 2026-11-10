@@ -10,6 +10,7 @@ export default function ApiKeyPanel() {
   const [busy, setBusy] = useState(false);
   const [newKey, setNewKey] = useState('');
   const [copyNote, setCopyNote] = useState('');
+  const [confirming, setConfirming] = useState(false);
 
   function load() {
     setError('');
@@ -20,7 +21,9 @@ export default function ApiKeyPanel() {
   useEffect(load, []);
 
   async function generate() {
+    if (busy) return;
     setBusy(true);
+    setConfirming(false);
     setError('');
     setCopyNote('');
     try {
@@ -54,15 +57,24 @@ export default function ApiKeyPanel() {
         <div className="banner ok">
           <p>Copy this key now. It will not be shown again.</p>
           <code className="key">{newKey}</code>{' '}
-          <button type="button" onClick={copy}>Copy</button> {copyNote}
+          <button type="button" onClick={copy}>Copy</button> {copyNote}{' '}
+          <button type="button" className="link" onClick={() => setNewKey('')}>I have saved it</button>
         </div>
       )}
-      {info && (
-        <button type="button" onClick={generate} disabled={busy}>
+      {info && !confirming && (
+        <button type="button" onClick={info.exists ? () => setConfirming(true) : generate} disabled={busy}>
           {busy ? 'Working…' : info.exists ? 'Replace key' : 'Generate key'}
         </button>
       )}
-      {info && info.exists && <p className="hint">Replacing the key stops the old one from working.</p>}
+      {info && confirming && (
+        <div className="banner error" role="alert">
+          <p>The current key stops working immediately, including the digest script until you update <code>DIGEST_API_KEY</code>.</p>
+          <div className="actions">
+            <button type="button" onClick={generate} disabled={busy}>Yes, replace it</button>
+            <button type="button" className="secondary" onClick={() => setConfirming(false)}>Cancel</button>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

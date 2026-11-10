@@ -124,18 +124,38 @@ function toAdf(text: string) {
   };
 }
 
-// Creates the issue with POST /rest/api/3/issue, then records it in our tickets table.
-export async function createTicket(userId: string, input: TicketInput): Promise<Ticket> {
-  const creds = loadCreds(userId);
-  const { status, json } = await jiraFetch(creds, 'POST', '/rest/api/3/issue', {
+// Jira's default priority names. A site that renamed them, or a project without Priority on its create screen,
+// makes Jira reject the field; createTicket then retries without it.
+const PRIORITY: Record<TicketInput['severity'], string> = { LOW: 'Low', MEDIUM: 'Medium', HIGH: 'High', CRITICAL: 'Highest' };
+
+function issueBody(input: TicketInput, withPriority: boolean) {
+  return {
     fields: {
       project: { key: input.projectKey },
       summary: input.title,
       issuetype: { name: 'Task' },
       description: toAdf(input.description),
       labels: ['identityhub-nhi', `severity-${input.severity.toLowerCase()}`],
+      ...(withPriority ? { priority: { name: PRIORITY[input.severity] } } : {}),
     },
-  });
+  };
+}
+
+function fieldErrors(json: unknown): Record<string, string> {
+  const parsed = z.object({ errors: z.record(z.string(), z.string()) }).safeParse(json);
+  return parsed.success ? parsed.data.errors : {};
+}
+
+// Creates the issue with POST /rest/api/3/issue, then records it in our tickets table.
+// prioritySet is false when Jira would not accept the Priority field and the ticket was created without it.
+export async function createTicket(userId: string, input: TicketInput): Promise<{ ticket: Ticket; prioritySet: boolean }> {
+  const creds = loadCreds(userId);
+  let prioritySet = true;
+  let { status, json } = await jiraFetch(creds, 'POST', '/rest/api/3/issue', issueBody(input, true));
+  if (status === 400 && 'priority' in fieldErrors(json)) {
+    prioritySet = false;
+    ({ status, json } = await jiraFetch(creds, 'POST', '/rest/api/3/issue', issueBody(input, false)));
+  }
 
   if (status === 401) {
     throw new AppError(409, 'JIRA_RECONNECT_REQUIRED', 'Jira rejected your saved credentials. Reconnect Jira.');
@@ -144,8 +164,7 @@ export async function createTicket(userId: string, input: TicketInput): Promise<
     throw new AppError(403, 'JIRA_PERMISSION_DENIED', 'Your Jira account cannot create issues in this project');
   }
   // Jira answers 400 for a missing project and for a project the user cannot create issues in.
-  const errors = z.object({ errors: z.record(z.string(), z.string()) }).safeParse(json);
-  if (status === 404 || (status === 400 && errors.success && 'project' in errors.data.errors)) {
+  if (status === 404 || (status === 400 && 'project' in fieldErrors(json))) {
     throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found, or you do not have access to it');
   }
   if (status === 400 || status === 422) {
@@ -154,11 +173,13 @@ export async function createTicket(userId: string, input: TicketInput): Promise<
   const created = z.object({ key: z.string() }).safeParse(json);
   if (status !== 201 || !created.success) throw unexpected();
 
-  return insertTicket(userId, {
+  const ticket = insertTicket(userId, {
     project_key: input.projectKey,
     issue_key: created.data.key,
     issue_url: `${creds.siteUrl}/browse/${created.data.key}`,
     title: input.title,
+    description: input.description,
     severity: input.severity,
   });
+  return { ticket, prioritySet };
 }

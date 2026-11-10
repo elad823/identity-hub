@@ -146,10 +146,27 @@ describe('tickets', () => {
     const sent = JSON.parse(init.body).fields;
     expect(sent.project.key).toBe('SEC');
     expect(sent.labels).toEqual(['identityhub-nhi', 'severity-high']);
+    expect(sent.priority).toEqual({ name: 'High' });
     expect(sent.description.type).toBe('doc');
     expect(sent.description.content).toHaveLength(2);
     const list = await app.inject({ method: 'GET', url: '/api/tickets?projectKey=SEC', headers: { cookie } });
     expect(list.json().tickets[0].title).toBe('Leaked service token');
+    expect(list.json().tickets[0].description).toBe('Line one\nLine two');
+  });
+
+  it('retries without Priority when the project does not accept it, and says so', async () => {
+    const cookie = await connectedUser('t7@example.com');
+    const fetchMock = vi
+      .fn()
+      .mockResolvedValueOnce(jsonResponse(400, { errors: { priority: "Field 'priority' cannot be set." } }))
+      .mockResolvedValueOnce(jsonResponse(201, { id: '3', key: 'KAN-3' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await createTicket(cookie, { projectKey: 'KAN', title: 'Some finding', description: 'Details', severity: 'HIGH' });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().prioritySet).toBe(false);
+    const retried = JSON.parse((fetchMock.mock.calls[1] as unknown as [string, { body: string }])[1].body).fields;
+    expect(retried.priority).toBeUndefined();
+    expect(retried.labels).toContain('severity-high');
   });
 
   it('answers 404 when the project does not exist', async () => {
@@ -168,6 +185,25 @@ describe('tickets', () => {
     const { cookie: other } = await register('t4@example.com');
     const res = await createTicket(other, { projectKey: 'SEC', title: 'Some finding', description: 'Details' });
     expect(res.json().error.code).toBe('JIRA_NOT_CONNECTED');
+  });
+
+  it('pages through tickets, newest first, with a total and a project filter', async () => {
+    const cookie = await connectedUser('t8@example.com');
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(201, { id: '4', key: 'SEC-1' })));
+    for (let i = 1; i <= 12; i++) {
+      await createTicket(cookie, { projectKey: i <= 2 ? 'OPS' : 'SEC', title: `Finding number ${i}`, description: 'Details' });
+    }
+    const get = (query: string) => app.inject({ method: 'GET', url: `/api/tickets?${query}`, headers: { cookie } });
+    const page1 = (await get('page=1')).json();
+    expect(page1.total).toBe(12);
+    expect(page1.tickets).toHaveLength(10);
+    expect(page1.tickets[0].title).toBe('Finding number 12');
+    expect(page1.projects).toEqual(['OPS', 'SEC']);
+    const page2 = (await get('page=2')).json();
+    expect(page2.tickets.map((t: { title: string }) => t.title)).toEqual(['Finding number 2', 'Finding number 1']);
+    const ops = (await get('projectKey=ops')).json();
+    expect(ops.total).toBe(2);
+    expect((await get('page=0')).statusCode).toBe(400);
   });
 
   it('does not show one user tickets to another', async () => {
