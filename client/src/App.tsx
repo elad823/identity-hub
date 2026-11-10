@@ -3,11 +3,15 @@ import { useEffect, useState } from 'react';
 import { api, errorMessage } from './api';
 import LoginForm, { type User } from './components/LoginForm';
 import ConnectJira from './components/ConnectJira';
+import TicketForm from './components/TicketForm';
+import RecentTickets from './components/RecentTickets';
 
 export default function App() {
   const [user, setUser] = useState<User | null | undefined>(undefined);
   const [error, setError] = useState('');
   const [project, setProject] = useState('');
+  const [connected, setConnected] = useState(false);
+  const [refreshKey, setRefreshKey] = useState(0);
 
   function loadMe() {
     setError('');
@@ -46,7 +50,11 @@ export default function App() {
             <p>Signed in as <strong>{user.email}</strong></p>
             <button onClick={logout}>Log out</button>
           </div>
-          <ConnectJira project={project} onProjectChange={setProject} onConnectedChange={() => {}} />
+          <div id="connect">
+            <ConnectJira project={project} onProjectChange={setProject} onConnectedChange={setConnected} />
+          </div>
+          <TicketForm project={project} connected={connected} onCreated={() => setRefreshKey((n) => n + 1)} />
+          <RecentTickets project={project} refreshKey={refreshKey} />
         </>
       )}
     </main>

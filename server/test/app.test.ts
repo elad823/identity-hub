@@ -117,3 +117,63 @@ describe('jira connection', () => {
     expect(res.statusCode).toBe(502);
   });
 });
+
+describe('tickets', () => {
+  afterEach(() => vi.unstubAllGlobals());
+
+  async function connectedUser(email: string) {
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(200, { displayName: 'Dana' })));
+    const u = await register(email);
+    await connect(u.cookie);
+    return u.cookie;
+  }
+
+  function createTicket(cookie: string, payload: object) {
+    return app.inject({ method: 'POST', url: '/api/tickets', headers: { cookie }, payload });
+  }
+
+  it('creates a ticket with an ADF description and labels, then lists it', async () => {
+    const cookie = await connectedUser('t1@example.com');
+    const fetchMock = vi.fn(async () => jsonResponse(201, { id: '1', key: 'SEC-7' }));
+    vi.stubGlobal('fetch', fetchMock);
+    const res = await createTicket(cookie, { projectKey: 'sec', title: 'Leaked service token', description: 'Line one\nLine two', severity: 'HIGH' });
+    expect(res.statusCode).toBe(201);
+    expect(res.json().ticket.issueUrl).toBe('https://acme.atlassian.net/browse/SEC-7');
+    const [url, init] = fetchMock.mock.calls[0] as unknown as [string, { body: string }];
+    expect(url).toBe('https://acme.atlassian.net/rest/api/3/issue');
+    const sent = JSON.parse(init.body).fields;
+    expect(sent.project.key).toBe('SEC');
+    expect(sent.labels).toEqual(['identityhub-nhi', 'severity-high']);
+    expect(sent.description.type).toBe('doc');
+    expect(sent.description.content).toHaveLength(2);
+    const list = await app.inject({ method: 'GET', url: '/api/tickets?projectKey=SEC', headers: { cookie } });
+    expect(list.json().tickets[0].title).toBe('Leaked service token');
+  });
+
+  it('answers 404 when the project does not exist', async () => {
+    const cookie = await connectedUser('t2@example.com');
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(400, { errors: { project: 'valid project is required' } })));
+    const res = await createTicket(cookie, { projectKey: 'NOPE', title: 'Some finding', description: 'Details' });
+    expect(res.statusCode).toBe(404);
+    expect(res.json().error.message).toBe('Project not found, or you do not have access to it');
+  });
+
+  it('validates the body and asks to connect Jira first', async () => {
+    const cookie = await connectedUser('t3@example.com');
+    const bad = await createTicket(cookie, { projectKey: 'SEC; DROP', title: 'abc', description: '' });
+    expect(bad.statusCode).toBe(400);
+    expect(Object.keys(bad.json().error.fields)).toEqual(['projectKey', 'title', 'description']);
+    const { cookie: other } = await register('t4@example.com');
+    const res = await createTicket(other, { projectKey: 'SEC', title: 'Some finding', description: 'Details' });
+    expect(res.json().error.code).toBe('JIRA_NOT_CONNECTED');
+  });
+
+  it('does not show one user tickets to another', async () => {
+    const a = await connectedUser('t5@example.com');
+    vi.stubGlobal('fetch', vi.fn(async () => jsonResponse(201, { id: '2', key: 'SEC-8' })));
+    await createTicket(a, { projectKey: 'SEC', title: 'Only for user A', description: 'Details' });
+    const { cookie: b } = await register('t6@example.com');
+    const list = await app.inject({ method: 'GET', url: '/api/tickets', headers: { cookie: b } });
+    expect(list.json().tickets).toEqual([]);
+  });
+});

@@ -52,3 +52,27 @@ The Jira API token is encrypted with AES-256-GCM before it touches the database,
 **Run and try**
 `npm run gen:key`, put the value in `.env` as `ENCRYPTION_KEY`, `npm run dev`, then use the Connect Jira card.
 Failure case: enter `http://x.com` as the site and see the Jira Cloud URL message.
+
+## Phase 3: create tickets and see recent ones
+
+**Added**
+- `server/src/jira.ts`: `ticketInput` (Zod, strict project key regex), `createTicket` (`POST /rest/api/3/issue`, ADF description built as an object, labels `identityhub-nhi` and `severity-<level>`, issue type `Task`).
+- `server/src/db.ts`: `tickets` table, `insertTicket`, `listTickets` (always filtered by `user_id`, newest 10).
+- `server/src/routes/tickets.ts`: `POST /api/tickets`, `GET /api/tickets?projectKey=`.
+- `client/src/components/TicketForm.tsx`: the form with busy, field-error and banner states, disabled when Jira is not connected.
+- `client/src/components/RecentTickets.tsx`: skeleton rows, empty state, error that keeps the old rows, Refresh button, links open in a new tab.
+
+**One request: `POST /api/tickets`**
+1. `requireUser` identifies the user. Zod validates and normalizes the body (project key must match `^[A-Z][A-Z0-9_]{1,9}$`).
+2. `createTicket` loads and decrypts this user's Jira credentials (409 if none).
+3. The server builds the issue JSON, with the description as ADF paragraph objects, and posts it to Jira.
+4. Jira answers are mapped: 401 reconnect, 403 permission, 400 with a `project` error becomes 404 "Project not found, or you do not have access to it".
+5. On success the title, key and link are saved in `tickets` with the user ID. The description is not stored. The route returns 201.
+6. The list route reads only this user's rows, so another user's tickets are never visible.
+
+**Explain it in the interview**
+The UI route and (later) the public API share one `createTicket` function, so validation, Jira mapping and storage live in one place. User text only enters Jira as ADF nodes and strict-regex project keys, never as concatenated strings.
+
+**Run and try**
+Connect Jira, choose a project, fill the form, submit, open the link. Use Refresh in the list.
+Failure case: type a project key that does not exist and submit. You should see "Project not found, or you do not have access to it".

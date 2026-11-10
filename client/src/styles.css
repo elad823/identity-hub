@@ -13,3 +13,11 @@ button.link { background: none; color: #2457d6; padding: 0; text-align: left; }
 .banner.ok { background: #e3f6e8; color: #17572b; }
 .field-error { color: #8a1c1c; font-size: 0.8rem; }
 .hint { color: #5b6577; font-size: 0.8rem; }
+.row { display: flex; justify-content: space-between; align-items: center; }
+.row h2 { margin: 0; }
+.tickets { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 8px; }
+.tickets li { display: flex; gap: 10px; align-items: center; }
+.skeleton { height: 20px; border-radius: 4px; background: linear-gradient(90deg, #e6e9ef, #f3f4f7, #e6e9ef); }
+.badge { font-size: 0.7rem; padding: 2px 6px; border-radius: 10px; background: #e6e9ef; }
+.badge.high, .badge.critical { background: #fde8e8; color: #8a1c1c; }
+.badge.medium { background: #fff3d6; color: #7a5200; }

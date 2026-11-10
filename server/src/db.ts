@@ -37,6 +37,16 @@ export function initDb(path: string): void {
       display_name TEXT NOT NULL,
       created_at TEXT NOT NULL
     );
+    CREATE TABLE IF NOT EXISTS tickets (
+      id TEXT PRIMARY KEY,
+      user_id TEXT NOT NULL REFERENCES users(id),
+      project_key TEXT NOT NULL,
+      issue_key TEXT NOT NULL,
+      issue_url TEXT NOT NULL,
+      title TEXT NOT NULL,
+      severity TEXT NOT NULL,
+      created_at TEXT NOT NULL
+    );
   `);
 }
 
@@ -94,4 +104,34 @@ export function getConnection(userId: string): JiraConnection | undefined {
   return db
     .prepare('SELECT site_url, email, token_enc, display_name FROM jira_connections WHERE user_id = ?')
     .get(userId) as JiraConnection | undefined;
+}
+
+export type Ticket = {
+  id: string;
+  project_key: string;
+  issue_key: string;
+  issue_url: string;
+  title: string;
+  severity: string;
+  created_at: string;
+};
+
+export function insertTicket(userId: string, t: Omit<Ticket, 'id' | 'created_at'>): Ticket {
+  const ticket = { ...t, id: randomUUID(), created_at: new Date().toISOString() };
+  db.prepare(
+    `INSERT INTO tickets (id, user_id, project_key, issue_key, issue_url, title, severity, created_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+  ).run(ticket.id, userId, ticket.project_key, ticket.issue_key, ticket.issue_url, ticket.title, ticket.severity, ticket.created_at);
+  return ticket;
+}
+
+// The 10 newest tickets of this user, optionally for one project.
+export function listTickets(userId: string, projectKey?: string): Ticket[] {
+  return db
+    .prepare(
+      `SELECT id, project_key, issue_key, issue_url, title, severity, created_at FROM tickets
+       WHERE user_id = ? AND (? IS NULL OR project_key = ?)
+       ORDER BY created_at DESC, rowid DESC LIMIT 10`,
+    )
+    .all(userId, projectKey ?? null, projectKey ?? null) as Ticket[];
 }

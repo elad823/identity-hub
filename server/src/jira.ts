@@ -1,6 +1,6 @@
 // Every call to Jira Cloud lives here: site check, verify, project list, and error mapping.
 import { z } from 'zod';
-import { getConnection } from './db.js';
+import { getConnection, insertTicket, type Ticket } from './db.js';
 import { decrypt } from './crypto.js';
 import { AppError } from './errors.js';
 
@@ -97,4 +97,68 @@ export async function listProjects(creds: JiraCreds): Promise<{ key: string; nam
     if (parsed.data.isLast !== false) break;
   }
   return projects;
+}
+
+// Strict key format, checked before the key is used in any Jira request.
+export const PROJECT_KEY_RE = /^[A-Z][A-Z0-9_]{1,9}$/;
+
+// The one input shape for creating a ticket, used by the UI route and the public API.
+export const ticketInput = z.object({
+  projectKey: z.string().trim().toUpperCase().regex(PROJECT_KEY_RE, 'Project key looks like ABC (2 to 10 letters or digits)'),
+  title: z.string().trim().min(5, 'Title must be at least 5 characters').max(255, 'Title must be at most 255 characters'),
+  description: z.string().trim().min(1, 'Add a description').max(10_000, 'Description must be at most 10000 characters'),
+  severity: z.enum(['LOW', 'MEDIUM', 'HIGH', 'CRITICAL']).default('MEDIUM'),
+});
+export type TicketInput = z.infer<typeof ticketInput>;
+
+// ADF is built as an object, one paragraph per non-empty line. The text is never put into a string template.
+function toAdf(text: string) {
+  return {
+    type: 'doc',
+    version: 1,
+    content: text
+      .split('\n')
+      .map((line) => line.trim())
+      .filter((line) => line.length > 0)
+      .map((line) => ({ type: 'paragraph', content: [{ type: 'text', text: line }] })),
+  };
+}
+
+// Creates the issue with POST /rest/api/3/issue, then records it in our tickets table.
+export async function createTicket(userId: string, input: TicketInput): Promise<Ticket> {
+  const creds = loadCreds(userId);
+  const { status, json } = await jiraFetch(creds, 'POST', '/rest/api/3/issue', {
+    fields: {
+      project: { key: input.projectKey },
+      summary: input.title,
+      issuetype: { name: 'Task' },
+      description: toAdf(input.description),
+      labels: ['identityhub-nhi', `severity-${input.severity.toLowerCase()}`],
+    },
+  });
+
+  if (status === 401) {
+    throw new AppError(409, 'JIRA_RECONNECT_REQUIRED', 'Jira rejected your saved credentials. Reconnect Jira.');
+  }
+  if (status === 403) {
+    throw new AppError(403, 'JIRA_PERMISSION_DENIED', 'Your Jira account cannot create issues in this project');
+  }
+  // Jira answers 400 for a missing project and for a project the user cannot create issues in.
+  const errors = z.object({ errors: z.record(z.string(), z.string()) }).safeParse(json);
+  if (status === 404 || (status === 400 && errors.success && 'project' in errors.data.errors)) {
+    throw new AppError(404, 'PROJECT_NOT_FOUND', 'Project not found, or you do not have access to it');
+  }
+  if (status === 400 || status === 422) {
+    throw new AppError(400, 'JIRA_REJECTED', 'Jira did not accept this ticket. Check the project and try again.');
+  }
+  const created = z.object({ key: z.string() }).safeParse(json);
+  if (status !== 201 || !created.success) throw unexpected();
+
+  return insertTicket(userId, {
+    project_key: input.projectKey,
+    issue_key: created.data.key,
+    issue_url: `${creds.siteUrl}/browse/${created.data.key}`,
+    title: input.title,
+    severity: input.severity,
+  });
 }
